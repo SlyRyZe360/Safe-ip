@@ -7,6 +7,17 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const LOG_FILE = path.join(__dirname, 'visitors.json');
 
+// Auth — set ADMIN_PASSWORD env var to change, default is 'admin123'
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const ADMIN_TOKEN = require('crypto').randomBytes(32).toString('hex'); // generated fresh each restart
+
+function requireAuth(req, res, next) {
+  const auth = req.headers['authorization'] || '';
+  const token = auth.replace('Bearer ', '').trim();
+  if (token === ADMIN_TOKEN) return next();
+  res.status(401).json({ error: 'Unauthorized' });
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -95,14 +106,24 @@ app.post('/api/track', async (req, res) => {
   res.json({ success: true, id: record.id });
 });
 
-// Get all visitors
-app.get('/api/visitors', (req, res) => {
+// Login endpoint
+app.post('/api/login', (req, res) => {
+  const { password } = req.body || {};
+  if (password === ADMIN_PASSWORD) {
+    res.json({ success: true, token: ADMIN_TOKEN });
+  } else {
+    res.status(401).json({ success: false, error: 'Invalid password' });
+  }
+});
+
+// Get all visitors (protected)
+app.get('/api/visitors', requireAuth, (req, res) => {
   const visitors = readVisitors();
   res.json(visitors);
 });
 
-// Get stats
-app.get('/api/stats', (req, res) => {
+// Get stats (protected)
+app.get('/api/stats', requireAuth, (req, res) => {
   const visitors = readVisitors();
   const uniqueIPs = new Set(visitors.map(v => v.ip)).size;
   const countries = {};
@@ -129,14 +150,16 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
-// Clear logs
-app.delete('/api/visitors', (req, res) => {
+// Clear logs (protected)
+app.delete('/api/visitors', requireAuth, (req, res) => {
   saveVisitors([]);
   res.json({ success: true });
 });
 
 app.listen(PORT, () => {
   console.log(`\n🌐 IP Tracker running at http://localhost:${PORT}`);
+  console.log(`🔐 Login: http://localhost:${PORT}/login.html`);
   console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard.html`);
-  console.log(`🔍 Tracking page: http://localhost:${PORT}/index.html\n`);
+  console.log(`🔍 Tracking page: http://localhost:${PORT}/index.html`);
+  console.log(`🔑 Admin password: ${ADMIN_PASSWORD}\n`);
 });

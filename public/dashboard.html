@@ -453,6 +453,9 @@
   <a href="dashboard.html" class="nav-item active" id="nav-dash">
     <span class="nav-icon">📊</span> Dashboard
   </a>
+  <a href="#" class="nav-item" id="nav-logout" onclick="logout()">
+    <span class="nav-icon">🚪</span> Logout
+  </a>
 
   <div class="sidebar-footer">
     <div class="live-dot">Live Tracking</div>
@@ -563,6 +566,21 @@
 <div id="toast"></div>
 
 <script>
+  // --- Auth guard ---
+  const token = sessionStorage.getItem('admin_token');
+  if (!token) {
+    window.location.href = '/login.html';
+  }
+
+  function authHeaders() {
+    return { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+  }
+
+  function logout() {
+    sessionStorage.removeItem('admin_token');
+    window.location.href = '/login.html';
+  }
+
   const COUNTRY_FLAGS = {
     'United States':'🇺🇸','Turkey':'🇹🇷','United Kingdom':'🇬🇧','Germany':'🇩🇪',
     'France':'🇫🇷','Russia':'🇷🇺','China':'🇨🇳','Japan':'🇯🇵','India':'🇮🇳',
@@ -634,9 +652,16 @@
   async function loadAll() {
     try {
       const [statsRes, visitorsRes] = await Promise.all([
-        fetch('/api/stats'),
-        fetch('/api/visitors'),
+        fetch('/api/stats',    { headers: authHeaders() }),
+        fetch('/api/visitors', { headers: authHeaders() }),
       ]);
+
+      // If token expired / invalid, redirect to login
+      if (statsRes.status === 401 || visitorsRes.status === 401) {
+        logout();
+        return;
+      }
+
       const stats = await statsRes.json();
       const visitors = await visitorsRes.json();
 
@@ -687,7 +712,7 @@
 
   async function clearLogs() {
     if (!confirm('Clear all visitor logs? This cannot be undone.')) return;
-    await fetch('/api/visitors', { method: 'DELETE' });
+    await fetch('/api/visitors', { method: 'DELETE', headers: authHeaders() });
     showToast('✅ Logs cleared', 'var(--green)');
     loadAll();
   }
